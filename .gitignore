@@ -1,0 +1,43 @@
+## Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+## Environment files
+.env
+.env.*
+!.env.example
+
+## Logs
+logs/
+*.log
+
+## Runtime data
+pids/
+*.pid
+*.pid.lock
+
+## Coverage / reports
+coverage/
+.nyc_output/
+
+## Build output
+dist/
+build/
+out/
+
+## Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+## OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+## Local uploads
+uploads/

@@ -1,0 +1,38 @@
+﻿{
+  "name": "vtms-backend-mongo",
+  "version": "1.0.0",
+  "description": "VTMS ERP Backend (MongoDB) - Monolith MVC (Controllers manage logic) JS-only",
+  "main": "cluster.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node cluster.js",
+    "start:single": "node server.js",
+    "worker": "node jobs/workers/watermark.worker.js",
+    "cron": "node jobs/schedulers/cron.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.8.0",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.18",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.12.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nanoid": "^5.1.4",
+    "redis": "^4.7.0",
+    "sharp": "^0.33.5",
+    "socket.io": "^4.8.1",
+    "bullmq": "^5.43.1",
+    "node-cache": "^5.1.2"
+  },
+  "devDependencies": {
+    "eslint": "^9.22.0",
+    "nodemon": "^3.1.9"
+  }
+}
