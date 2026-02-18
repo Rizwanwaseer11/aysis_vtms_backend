@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const authJwt = require("../../middlewares/authJwt");
 const requireRole = require("../../middlewares/requireRole");
-const c = require("../../controllers/operations/armRoller.controller");
+const c = require("../../controllers/operations/armroller.controller");
 
 // Field operations routes (USER tokens)
 router.use(authJwt);
