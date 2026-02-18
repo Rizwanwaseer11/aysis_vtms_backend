@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const { nanoid } = require("nanoid");
+const crypto = require("crypto");
 const { ok, fail } = require("../utils/response");
 const { UPLOAD_TMP_DIR, PUBLIC_BASE_URL } = require("../config/env");
 const MediaFile = require("../models/MediaFile");
@@ -17,7 +17,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_TMP_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || ".jpg") || ".jpg";
-    cb(null, `${Date.now()}_${nanoid(10)}${ext}`);
+    const rand = crypto.randomBytes(8).toString("hex"); // 16 chars
+    cb(null, `${Date.now()}_${rand}${ext}`);
   }
 });
 
