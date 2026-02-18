@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const multer = require("multer");
 const crypto = require("crypto");
 const { ok, fail } = require("../utils/response");
@@ -9,12 +10,28 @@ const { watermarkQueue } = require("../jobs/queue");
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
+  return p;
+}
+
+function resolveTmpDir() {
+  try {
+    return ensureDir(UPLOAD_TMP_DIR);
+  } catch (e) {
+    // Fallback for read-only platforms (e.g., Vercel)
+    const fallback = path.join(os.tmpdir(), "uploads", "tmp");
+    try {
+      return ensureDir(fallback);
+    } catch (err) {
+      // Last resort: let multer fail later with a clearer error
+      return UPLOAD_TMP_DIR;
+    }
+  }
 }
 
 // Multer storage (tmp)
-ensureDir(UPLOAD_TMP_DIR);
+const TMP_DIR = resolveTmpDir();
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_TMP_DIR),
+  destination: (req, file, cb) => cb(null, TMP_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || ".jpg") || ".jpg";
     const rand = crypto.randomBytes(8).toString("hex"); // 16 chars
