@@ -1,6 +1,7 @@
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -19,12 +20,28 @@ function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
+function resolveWritableDir(preferredPath, fallbackParts) {
+  try {
+    ensureDir(preferredPath);
+    return preferredPath;
+  } catch (e) {
+    const fallback = path.join(os.tmpdir(), ...fallbackParts);
+    try {
+      ensureDir(fallback);
+      return fallback;
+    } catch (err) {
+      console.error("[bootstrap] upload dir unavailable", { preferredPath, fallback, err });
+      return preferredPath;
+    }
+  }
+}
+
 async function bootstrap() {
   await connectMongo();
   await connectRedis();
 
-  ensureDir(UPLOAD_TMP_DIR);
-  ensureDir(UPLOAD_FINAL_DIR);
+  const TMP_DIR = resolveWritableDir(UPLOAD_TMP_DIR, ["uploads", "tmp"]);
+  const FINAL_DIR = resolveWritableDir(UPLOAD_FINAL_DIR, ["uploads", "final"]);
 
   const app = express();
 
@@ -39,8 +56,8 @@ async function bootstrap() {
   app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
   // Static for local uploads (dev)
-  app.use("/uploads/tmp", express.static(path.resolve(UPLOAD_TMP_DIR)));
-  app.use("/uploads/final", express.static(path.resolve(UPLOAD_FINAL_DIR)));
+  app.use("/uploads/tmp", express.static(path.resolve(TMP_DIR)));
+  app.use("/uploads/final", express.static(path.resolve(FINAL_DIR)));
 
   // Health check
   app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
