@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "vtms-backend-mongo",
   "version": "1.0.0",
   "description": "VTMS ERP Backend (MongoDB) - Monolith MVC (Controllers manage logic) JS-only",
