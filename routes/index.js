@@ -9,6 +9,7 @@ router.use("/admin/vehicle-types", require("./admin/vehicleTypes.routes"));
 router.use("/admin/vehicles", require("./admin/vehicles.routes"));
 router.use("/admin/users", require("./admin/users.routes"));
 router.use("/admin/designations", require("./admin/designations.routes"));
+router.use("/admin/permissions", require("./admin/permissions.routes"));
 router.use("/admin/employees", require("./admin/employees.routes"));
 router.use("/admin/geo", require("./admin/geo.routes"));
 router.use("/admin/bins", require("./admin/bins.routes"));

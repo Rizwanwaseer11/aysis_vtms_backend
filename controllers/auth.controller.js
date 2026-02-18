@@ -16,8 +16,9 @@ async function userLogin(req, res, next) {
     const { email, password } = req.body || {};
     if (!email || !password) return fail(res, "email and password are required", null, 400);
 
-    const user = await User.findOne({ email: String(email).toLowerCase(), deletedAt: null, isActive: true });
+    const user = await User.findOne({ email: String(email).toLowerCase(), deletedAt: null });
     if (!user) return fail(res, "Invalid credentials", null, 401);
+    if (!user.isActive) return fail(res, "You are inactive, kindly contact VTMS officer", null, 403);
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) return fail(res, "Invalid credentials", null, 401);
@@ -45,8 +46,9 @@ async function employeeLogin(req, res, next) {
     const { email, password } = req.body || {};
     if (!email || !password) return fail(res, "email and password are required", null, 400);
 
-    const emp = await Employee.findOne({ email: String(email).toLowerCase(), deletedAt: null, isActive: true });
+    const emp = await Employee.findOne({ email: String(email).toLowerCase(), deletedAt: null });
     if (!emp) return fail(res, "Invalid credentials", null, 401);
+    if (!emp.isActive) return fail(res, "You are inactive, kindly contact VTMS officer", null, 403);
 
     const match = await bcrypt.compare(password, emp.passwordHash);
     if (!match) return fail(res, "Invalid credentials", null, 401);
@@ -54,19 +56,35 @@ async function employeeLogin(req, res, next) {
     // Pull permissions from designation
     const desig = await Designation.findById(emp.designationId);
     const permissionKeys = desig?.permissionKeys || [];
+    const pagePermissions = Array.isArray(emp.pagePermissions) ? emp.pagePermissions : [];
 
     emp.lastLoginAt = new Date();
     await emp.save();
 
     const token = jwt.sign(
-      { kind: "EMPLOYEE", id: emp._id, role: emp.designationCode || "EMPLOYEE", name: emp.name, hrNumber: emp.hrNumber, permissions: permissionKeys },
+      {
+        kind: "EMPLOYEE",
+        id: emp._id,
+        role: emp.designationCode || "EMPLOYEE",
+        name: emp.name,
+        hrNumber: emp.hrNumber,
+        permissions: permissionKeys,
+        pages: pagePermissions
+      },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
     return ok(res, "Login success", {
       token,
-      employee: { id: emp._id, name: emp.name, designation: emp.designationName, designationCode: emp.designationCode, permissions: permissionKeys }
+      employee: {
+        id: emp._id,
+        name: emp.name,
+        designation: emp.designationName,
+        designationCode: emp.designationCode,
+        permissions: permissionKeys,
+        pagePermissions
+      }
     });
   } catch (e) { next(e); }
 }

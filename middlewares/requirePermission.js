@@ -11,7 +11,7 @@ function requirePermission(permissionKey) {
     }
 
     const perms = req.auth?.permissions || [];
-    if (!perms.includes(permissionKey)) {
+    if (!perms.includes(permissionKey) && !perms.includes("ALL")) {
       return res.status(403).json({ success: false, message: "Forbidden: missing permission" });
     }
     next();

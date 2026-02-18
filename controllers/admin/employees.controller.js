@@ -3,6 +3,7 @@ const Employee = require("../../models/Employee");
 const Designation = require("../../models/Designation");
 const { ok, fail } = require("../../utils/response");
 const { parsePagination, buildMeta } = require("../../utils/pagination");
+const { normalizeUserPagePermissions } = require("../../utils/permissions");
 
 async function list(req, res, next) {
   try {
@@ -39,6 +40,14 @@ async function create(req, res, next) {
     const desig = await Designation.findById(body.designationId);
     if (!desig) return fail(res, "Designation not found", null, 404);
 
+    let normalizedPagePermissions = [];
+    if (body.pagePermissions !== undefined) {
+      if (!Array.isArray(body.pagePermissions)) return fail(res, "pagePermissions must be array");
+      const normalized = normalizeUserPagePermissions(body.pagePermissions);
+      if (normalized.invalid?.length) return fail(res, `Invalid page permissions: ${normalized.invalid.join(", ")}`);
+      normalizedPagePermissions = normalized.keys;
+    }
+
     const passwordHash = await bcrypt.hash(String(body.password), 10);
 
     const doc = await Employee.create({
@@ -50,7 +59,8 @@ async function create(req, res, next) {
       passwordHash,
       designationId: desig._id,
       designationName: desig.name,
-      designationCode: desig.code || ""
+      designationCode: desig.code || "",
+      pagePermissions: body.pagePermissions !== undefined ? normalizedPagePermissions : []
     });
 
     return ok(res, "Employee created", { id: doc._id }, null, 201);
@@ -81,6 +91,13 @@ async function update(req, res, next) {
       doc.designationId = desig._id;
       doc.designationName = desig.name;
       doc.designationCode = desig.code || "";
+    }
+
+    if (body.pagePermissions !== undefined) {
+      if (!Array.isArray(body.pagePermissions)) return fail(res, "pagePermissions must be array");
+      const normalized = normalizeUserPagePermissions(body.pagePermissions);
+      if (normalized.invalid?.length) return fail(res, `Invalid page permissions: ${normalized.invalid.join(", ")}`);
+      doc.pagePermissions = normalized.keys;
     }
 
     if (body.password) {

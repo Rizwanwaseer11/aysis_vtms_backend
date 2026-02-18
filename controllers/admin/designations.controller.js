@@ -1,5 +1,5 @@
 const Designation = require("../../models/Designation");
-const Permission = require("../../models/Permission");
+const { normalizeDesignationPermissions } = require("../../utils/permissions");
 const { ok, fail } = require("../../utils/response");
 
 async function list(req, res, next) {
@@ -14,16 +14,18 @@ async function create(req, res, next) {
     const { name, code, permissionKeys } = req.body || {};
     if (!name) return fail(res, "name is required");
 
-    // ensure provided permission keys exist (optional)
-    if (Array.isArray(permissionKeys) && permissionKeys.length) {
-      const found = await Permission.countDocuments({ key: { $in: permissionKeys } });
-      if (found !== permissionKeys.length) return fail(res, "Some permission keys are invalid");
+    let normalizedPermissionKeys = [];
+    if (permissionKeys !== undefined) {
+      if (!Array.isArray(permissionKeys)) return fail(res, "permissionKeys must be array");
+      const normalized = normalizeDesignationPermissions(permissionKeys);
+      if (normalized.invalid?.length) return fail(res, `Invalid permission keys: ${normalized.invalid.join(", ")}`);
+      normalizedPermissionKeys = normalized.keys;
     }
 
     const doc = await Designation.create({
       name: String(name).trim(),
       code: String(code || "").trim().toUpperCase(),
-      permissionKeys: Array.isArray(permissionKeys) ? permissionKeys : []
+      permissionKeys: Array.isArray(permissionKeys) ? normalizedPermissionKeys : []
     });
 
     return ok(res, "Designation created", doc, null, 201);
@@ -43,9 +45,9 @@ async function update(req, res, next) {
 
     if (permissionKeys !== undefined) {
       if (!Array.isArray(permissionKeys)) return fail(res, "permissionKeys must be array");
-      const found = await Permission.countDocuments({ key: { $in: permissionKeys } });
-      if (found !== permissionKeys.length) return fail(res, "Some permission keys are invalid");
-      doc.permissionKeys = permissionKeys;
+      const normalized = normalizeDesignationPermissions(permissionKeys);
+      if (normalized.invalid?.length) return fail(res, `Invalid permission keys: ${normalized.invalid.join(", ")}`);
+      doc.permissionKeys = normalized.keys;
     }
 
     await doc.save();
