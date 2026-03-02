@@ -39,6 +39,20 @@ function parseDateOrNow(value) {
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
+function normalizeVehicleNumber(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function vehicleNumberRegex(value) {
+  const normalized = normalizeVehicleNumber(value);
+  if (!normalized) return null;
+  // allow optional separators between chars (e.g., MT-001, MT 001, MT001)
+  const escaped = normalized.split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join("[^A-Z0-9]*")}$`, "i");
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -83,17 +97,15 @@ async function startShift(req, res, next) {
     if (missing.length) return fail(res, `Missing fields: ${missing.join(", ")}`);
 
     const normalizedHr = String(body.hrNumber).trim().toUpperCase();
-    if (!mustBeSelfOrAdmin(req, normalizedHr)) {
+
+    // Always resolve the user from the token to avoid HR casing issues and enforce self-only shifts.
+    const user = await User.findOne({ _id: req.auth.id, isActive: true, deletedAt: null });
+    if (!user) return fail(res, "User not found", null, 404);
+
+    if (normalizedHr && String(user.hrNumber || "").toUpperCase() !== normalizedHr) {
       return fail(res, "hrNumber does not match logged in user", null, 403);
     }
 
-    // Validate user
-    const user = await User.findOne({
-      hrNumber: normalizedHr,
-      isActive: true,
-      deletedAt: null
-    });
-    if (!user) return fail(res, "HR number not found", null, 404);
     if (user.operationType !== "GATE") return fail(res, "User operation mismatch", null, 400);
 
     // Vehicle is optional for GATE shifts
@@ -174,10 +186,14 @@ async function endShift(req, res, next) {
 async function getVehicle(req, res, next) {
   try {
     if (!requireGateUser(req, res)) return;
-    const vehicleNumber = String(req.params.vehicleNumber || "").trim();
+    const vehicleNumber = String(req.params.vehicleNumber || "").trim().toUpperCase();
     if (!vehicleNumber) return fail(res, "vehicleNumber is required");
 
-    const vehicle = await Vehicle.findOne({ vehicleNumber, isActive: true }).lean();
+    const regex = vehicleNumberRegex(vehicleNumber);
+    const vehicle = await Vehicle.findOne({
+      vehicleNumber: regex || vehicleNumber,
+      isActive: true
+    }).lean();
     if (!vehicle) return fail(res, "Vehicle not found", null, 404);
 
     return ok(res, "Vehicle", {
@@ -196,13 +212,14 @@ async function getVehicle(req, res, next) {
 async function getOpenActivity(req, res, next) {
   try {
     if (!requireGateUser(req, res)) return;
-    const vehicleNumber = String(req.query.vehicleNumber || "").trim();
+    const vehicleNumber = String(req.query.vehicleNumber || "").trim().toUpperCase();
     if (!vehicleNumber) return fail(res, "vehicleNumber is required");
+    const regex = vehicleNumberRegex(vehicleNumber);
 
     const filter = {
       operationType: "GATE",
       deletedAt: null,
-      "vehicle.vehicleNumber": vehicleNumber,
+      "vehicle.vehicleNumber": regex || vehicleNumber,
       "after.at": null
     };
     if (req.query.attendanceId) filter.attendanceId = req.query.attendanceId;
@@ -238,14 +255,15 @@ async function createBeforeActivity(req, res, next) {
       return fail(res, "Forbidden: shift does not belong to you", null, 403);
     }
 
-    const vehicleNumber = String(body.vehicleNumber).trim();
-    const vehicle = await Vehicle.findOne({ vehicleNumber, isActive: true });
+    const vehicleNumber = String(body.vehicleNumber).trim().toUpperCase();
+    const regex = vehicleNumberRegex(vehicleNumber);
+    const vehicle = await Vehicle.findOne({ vehicleNumber: regex || vehicleNumber, isActive: true });
     if (!vehicle) return fail(res, "Vehicle not found", null, 404);
 
     const open = await Model.findOne({
       operationType: "GATE",
       deletedAt: null,
-      "vehicle.vehicleNumber": vehicleNumber,
+      "vehicle.vehicleNumber": regex || vehicleNumber,
       "after.at": null
     }).lean();
     if (open) return fail(res, "Vehicle already has open gate activity", { openActivityId: open._id }, 409);
@@ -366,8 +384,9 @@ async function createActivity(req, res, next) {
       return fail(res, "Forbidden: shift does not belong to you", null, 403);
     }
 
-    const vehicleNumber = String(body.vehicleNumber).trim();
-    const vehicle = await Vehicle.findOne({ vehicleNumber, isActive: true });
+    const vehicleNumber = String(body.vehicleNumber).trim().toUpperCase();
+    const regex = vehicleNumberRegex(vehicleNumber);
+    const vehicle = await Vehicle.findOne({ vehicleNumber: regex || vehicleNumber, isActive: true });
     if (!vehicle) return fail(res, "Vehicle not found", null, 404);
 
     const [beforeMedia, afterMedia] = await Promise.all([

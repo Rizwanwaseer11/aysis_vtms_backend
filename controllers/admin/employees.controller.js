@@ -54,7 +54,7 @@ async function create(req, res, next) {
       name: String(body.name).trim(),
       fatherName: String(body.fatherName || "").trim(),
       nicNumber: String(body.nicNumber).trim(),
-      hrNumber: String(body.hrNumber).trim(),
+      hrNumber: String(body.hrNumber).trim().toUpperCase(),
       email: String(body.email).toLowerCase().trim(),
       passwordHash,
       designationId: desig._id,
@@ -81,7 +81,7 @@ async function update(req, res, next) {
     if (body.name !== undefined) doc.name = String(body.name).trim();
     if (body.fatherName !== undefined) doc.fatherName = String(body.fatherName).trim();
     if (body.nicNumber !== undefined) doc.nicNumber = String(body.nicNumber).trim();
-    if (body.hrNumber !== undefined) doc.hrNumber = String(body.hrNumber).trim();
+    if (body.hrNumber !== undefined) doc.hrNumber = String(body.hrNumber).trim().toUpperCase();
     if (body.email !== undefined) doc.email = String(body.email).toLowerCase().trim();
     if (body.isActive !== undefined) doc.isActive = Boolean(body.isActive);
 

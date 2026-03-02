@@ -45,7 +45,7 @@ async function create(req, res, next) {
     if (!vt) return fail(res, "Vehicle type not found", null, 404);
 
     const doc = await Vehicle.create({
-      vehicleNumber: String(vehicleNumber).trim(),
+      vehicleNumber: String(vehicleNumber).trim().toUpperCase(),
       vehicleTypeId: vt._id,
       vehicleTypeName: vt.name,
       ownership: ownership === "PRIVATE" ? "PRIVATE" : "COMPANY"
@@ -67,7 +67,7 @@ async function update(req, res, next) {
     const doc = await Vehicle.findById(id);
     if (!doc) return fail(res, "Vehicle not found", null, 404);
 
-    if (vehicleNumber !== undefined) doc.vehicleNumber = String(vehicleNumber).trim();
+    if (vehicleNumber !== undefined) doc.vehicleNumber = String(vehicleNumber).trim().toUpperCase();
 
     if (vehicleTypeId !== undefined) {
       const vt = await VehicleType.findById(vehicleTypeId);

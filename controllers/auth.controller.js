@@ -32,7 +32,16 @@ async function userLogin(req, res, next) {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    return ok(res, "Login success", { token, user: { id: user._id, name: user.name, role: user.role, operationType: user.operationType } });
+    return ok(res, "Login success", {
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        role: user.role,
+        operationType: user.operationType,
+        hrNumber: user.hrNumber
+      }
+    });
   } catch (e) { next(e); }
 }
 
