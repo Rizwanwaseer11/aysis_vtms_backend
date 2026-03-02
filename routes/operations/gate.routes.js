@@ -7,8 +7,19 @@ const c = require("../../controllers/operations/gate.controller");
 router.use(authJwt);
 router.use(requireRole(["SUPERVISOR","DRIVER","ADMIN"]));
 
+// Shift management
+router.get("/shift/active", c.getActiveShift);
 router.post("/shift/start", c.startShift);
 router.patch("/shift/:id/end", c.endShift);
+
+// Gate stats
+router.get("/stats", c.stats);
+
+// Vehicle lookup + activity lifecycle
+router.get("/vehicle/:vehicleNumber", c.getVehicle);
+router.get("/activity/open", c.getOpenActivity);
+router.post("/activity/before", c.createBeforeActivity);
+router.patch("/activity/:id/after", c.completeAfterActivity);
 router.post("/activity", c.createActivity);
 
 // Admin list view (EMPLOYEE tokens) can call this via separate endpoint if desired.

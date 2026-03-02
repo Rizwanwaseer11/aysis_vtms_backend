@@ -4,7 +4,7 @@ const os = require("os");
 const multer = require("multer");
 const crypto = require("crypto");
 const { ok, fail } = require("../utils/response");
-const { UPLOAD_TMP_DIR, PUBLIC_BASE_URL } = require("../config/env");
+const { UPLOAD_TMP_DIR, UPLOAD_FINAL_DIR, PUBLIC_BASE_URL } = require("../config/env");
 const MediaFile = require("../models/MediaFile");
 const { watermarkQueue } = require("../jobs/queue");
 
@@ -78,6 +78,28 @@ async function uploadMedia(req, res, next) {
       watermarkStatus: "PENDING",
       meta
     });
+
+    // If client already watermarked the image, skip server-side watermarking.
+    const skipWatermark = ["true", "1", "yes", "on"].includes(String(body.skipWatermark || "").toLowerCase());
+    if (skipWatermark) {
+      ensureDir(UPLOAD_FINAL_DIR);
+      const fileName = path.basename(req.file.path);
+      const outPath = path.join(UPLOAD_FINAL_DIR, fileName);
+      try {
+        fs.renameSync(req.file.path, outPath);
+      } catch {
+        // Fallback to copy+unlink if rename fails (e.g. cross-device)
+        fs.copyFileSync(req.file.path, outPath);
+        fs.unlinkSync(req.file.path);
+      }
+
+      doc.url = `${PUBLIC_BASE_URL}/uploads/final/${fileName}`;
+      doc.thumbUrl = "";
+      doc.watermarkStatus = "DONE";
+      await doc.save();
+
+      return ok(res, "Uploaded", { mediaId: doc._id, url: doc.url, status: doc.watermarkStatus }, null, 201);
+    }
 
     // Build watermark line text (simple). You can expand to multi-line.
     const watermarkText = [
