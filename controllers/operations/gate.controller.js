@@ -28,10 +28,10 @@ function requireGateUser(req, res) {
 }
 
 function mustBeSelfOrAdmin(req, hrNumber) {
-  const tokenHr = String(req.auth?.hrNumber || "").trim();
+  const tokenHr = String(req.auth?.hrNumber || "").trim().toUpperCase();
   if (req.auth?.role === "ADMIN") return true;
   if (!tokenHr) return false;
-  return tokenHr === String(hrNumber || "").trim();
+  return tokenHr === String(hrNumber || "").trim().toUpperCase();
 }
 
 function parseDateOrNow(value) {
@@ -54,8 +54,8 @@ async function getActiveShift(req, res, next) {
     if (!requireGateUser(req, res)) return;
     const hrNumber =
       req.auth.role === "ADMIN" && req.query.hrNumber
-        ? String(req.query.hrNumber).trim()
-        : String(req.auth.hrNumber || "").trim();
+        ? String(req.query.hrNumber).trim().toUpperCase()
+        : String(req.auth.hrNumber || "").trim().toUpperCase();
     if (!hrNumber) return ok(res, "Active shift", null);
 
     const shift = await AttendanceShift.findOne({
@@ -82,17 +82,18 @@ async function startShift(req, res, next) {
     const missing = required.filter((k) => body[k] === undefined || body[k] === null || body[k] === "");
     if (missing.length) return fail(res, `Missing fields: ${missing.join(", ")}`);
 
-    if (!mustBeSelfOrAdmin(req, body.hrNumber)) {
+    const normalizedHr = String(body.hrNumber).trim().toUpperCase();
+    if (!mustBeSelfOrAdmin(req, normalizedHr)) {
       return fail(res, "hrNumber does not match logged in user", null, 403);
     }
 
     // Validate user
     const user = await User.findOne({
-      hrNumber: String(body.hrNumber).trim(),
+      hrNumber: normalizedHr,
       isActive: true,
       deletedAt: null
     });
-    if (!user) return fail(res, "User not found", null, 404);
+    if (!user) return fail(res, "HR number not found", null, 404);
     if (user.operationType !== "GATE") return fail(res, "User operation mismatch", null, 400);
 
     // Vehicle is optional for GATE shifts
@@ -145,7 +146,10 @@ async function endShift(req, res, next) {
     if (shift.operationType !== "GATE") return fail(res, "Invalid shift operationType", null, 400);
     if (shift.status !== "ONWORK") return fail(res, "Shift already completed", null, 409);
 
-    if (req.auth.role !== "ADMIN" && shift.supervisor?.hrNumber !== req.auth.hrNumber) {
+    if (
+      req.auth.role !== "ADMIN" &&
+      String(shift.supervisor?.hrNumber || "").toUpperCase() !== String(req.auth.hrNumber || "").toUpperCase()
+    ) {
       return fail(res, "Forbidden: shift does not belong to you", null, 403);
     }
 
@@ -203,7 +207,7 @@ async function getOpenActivity(req, res, next) {
     };
     if (req.query.attendanceId) filter.attendanceId = req.query.attendanceId;
     if (req.auth.role !== "ADMIN" && req.auth.hrNumber) {
-      filter["supervisor.hrNumber"] = req.auth.hrNumber;
+      filter["supervisor.hrNumber"] = String(req.auth.hrNumber).toUpperCase();
     }
 
     const doc = await Model.findOne(filter).sort({ createdAt: -1 }).lean();
@@ -227,7 +231,10 @@ async function createBeforeActivity(req, res, next) {
     if (!shift) return fail(res, "Attendance shift not found", null, 404);
     if (shift.operationType !== "GATE") return fail(res, "Invalid shift operationType", null, 400);
     if (shift.status !== "ONWORK") return fail(res, "Shift is not active", null, 409);
-    if (req.auth.role !== "ADMIN" && shift.supervisor?.hrNumber !== req.auth.hrNumber) {
+    if (
+      req.auth.role !== "ADMIN" &&
+      String(shift.supervisor?.hrNumber || "").toUpperCase() !== String(req.auth.hrNumber || "").toUpperCase()
+    ) {
       return fail(res, "Forbidden: shift does not belong to you", null, 403);
     }
 
