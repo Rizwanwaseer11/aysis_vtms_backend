@@ -216,18 +216,28 @@ async function getOpenActivity(req, res, next) {
     if (!vehicleNumber) return fail(res, "vehicleNumber is required");
     const regex = vehicleNumberRegex(vehicleNumber);
 
-    const filter = {
+    const baseFilter = {
       operationType: "GATE",
       deletedAt: null,
       "vehicle.vehicleNumber": regex || vehicleNumber,
       "after.at": null
     };
-    if (req.query.attendanceId) filter.attendanceId = req.query.attendanceId;
     if (req.auth.role !== "ADMIN" && req.auth.hrNumber) {
-      filter["supervisor.hrNumber"] = String(req.auth.hrNumber).toUpperCase();
+      baseFilter["supervisor.hrNumber"] = String(req.auth.hrNumber).toUpperCase();
     }
 
-    const doc = await Model.findOne(filter).sort({ createdAt: -1 }).lean();
+    let doc = null;
+    if (req.query.attendanceId) {
+      doc = await Model.findOne({
+        ...baseFilter,
+        attendanceId: req.query.attendanceId
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+    }
+    if (!doc) {
+      doc = await Model.findOne(baseFilter).sort({ createdAt: -1 }).lean();
+    }
     return ok(res, "Open activity", doc || null);
   } catch (e) { next(e); }
 }
@@ -339,7 +349,11 @@ async function completeAfterActivity(req, res, next) {
     const shift = await AttendanceShift.findById(doc.attendanceId);
     if (!shift) return fail(res, "Attendance shift not found", null, 404);
     if (shift.status !== "ONWORK") return fail(res, "Shift is not active", null, 409);
-    if (req.auth.role !== "ADMIN" && shift.supervisor?.hrNumber !== req.auth.hrNumber) {
+    if (
+      req.auth.role !== "ADMIN" &&
+      String(shift.supervisor?.hrNumber || "").toUpperCase() !==
+        String(req.auth.hrNumber || "").toUpperCase()
+    ) {
       return fail(res, "Forbidden: shift does not belong to you", null, 403);
     }
 
