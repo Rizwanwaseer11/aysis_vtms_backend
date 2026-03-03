@@ -34,7 +34,7 @@ async function createBin08(req, res, next) {
     if (!ward) return fail(res, "Ward not found", null, 404);
 
     const doc = await Bin08.create({
-      binNumber: String(body.binNumber).trim(),
+      binNumber: String(body.binNumber).trim().toUpperCase(),
       wardId: ward._id,
       wardName: ward.name,
       ucId: ward.ucId,
@@ -58,7 +58,7 @@ async function updateBin08(req, res, next) {
     const doc = await Bin08.findById(id);
     if (!doc) return fail(res, "Bin not found", null, 404);
 
-    if (body.binNumber !== undefined) doc.binNumber = String(body.binNumber).trim();
+    if (body.binNumber !== undefined) doc.binNumber = String(body.binNumber).trim().toUpperCase();
     if (body.lat !== undefined) doc.lat = Number(body.lat);
     if (body.lng !== undefined) doc.lng = Number(body.lng);
     if (body.radiusM !== undefined) doc.radiusM = Number(body.radiusM);
@@ -91,7 +91,7 @@ async function createBin5(req, res, next) {
   try {
     const { binNumber } = req.body || {};
     if (!binNumber) return fail(res, "binNumber is required");
-    const doc = await Bin5.create({ binNumber: String(binNumber).trim() });
+    const doc = await Bin5.create({ binNumber: String(binNumber).trim().toUpperCase() });
     return ok(res, "5 cubic bin created", doc, null, 201);
   } catch (e) { next(e); }
 }

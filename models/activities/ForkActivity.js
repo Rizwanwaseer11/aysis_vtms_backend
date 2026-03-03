@@ -89,5 +89,6 @@ Schema.index({ operationType: 1, createdAt: -1 });
 
 Schema.index({ "fork.binNumber": 1, createdAt: -1 });
 Schema.index({ "geo.wardId": 1, createdAt: -1 });
+Schema.index({ attendanceId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ForkActivity", Schema);

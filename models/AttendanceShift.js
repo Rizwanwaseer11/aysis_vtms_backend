@@ -29,6 +29,11 @@ const AttendanceShiftSchema = new mongoose.Schema(
 
     status: { type: String, enum: ["ONWORK","COMPLETED"], default: "ONWORK" },
 
+    forkStats: {
+      gtsTrips: { type: Number, default: 0 },
+      laborers: { type: Number, default: 0 }
+    },
+
     start: {
       at: { type: Date, default: Date.now },
       lat: { type: Number, default: null },
