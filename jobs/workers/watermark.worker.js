@@ -12,7 +12,7 @@ const fs = require("fs");
 const path = require("path");
 const sharp = require("sharp");
 const { Worker } = require("bullmq");
-const { REDIS_URL, UPLOAD_FINAL_DIR, PUBLIC_BASE_URL } = require("../../config/env");
+const { REDIS_URL, UPLOAD_FINAL_DIR, PUBLIC_BASE_URL, API_BASE } = require("../../config/env");
 const MediaFile = require("../../models/MediaFile");
 const { connectMongo } = require("../../config/db");
 
@@ -24,6 +24,19 @@ function conn() {
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
+
+function normalizeBaseUrl(raw) {
+  const candidate = String(raw || "").trim();
+  if (!candidate) return "";
+  let value = candidate.endsWith("/") ? candidate.slice(0, -1) : candidate;
+  if (API_BASE && value.endsWith(API_BASE)) {
+    value = value.slice(0, -API_BASE.length);
+    if (value.endsWith("/")) value = value.slice(0, -1);
+  }
+  return value;
+}
+
+const PUBLIC_BASE = normalizeBaseUrl(PUBLIC_BASE_URL);
 
 function makeSvgWatermark(text) {
   // Simple SVG overlay. For Urdu/complex scripts, consider using an image-based watermark.
@@ -65,8 +78,12 @@ function makeSvgWatermark(text) {
           .jpeg({ quality: 70 })
           .toFile(thumbPath);
 
-        const url = `${PUBLIC_BASE_URL}/uploads/final/${fileName}`;
-        const thumbUrl = `${PUBLIC_BASE_URL}/uploads/final/thumb_${fileName}`;
+        const url = PUBLIC_BASE
+          ? `${PUBLIC_BASE}/uploads/final/${fileName}`
+          : `/uploads/final/${fileName}`;
+        const thumbUrl = PUBLIC_BASE
+          ? `${PUBLIC_BASE}/uploads/final/thumb_${fileName}`
+          : `/uploads/final/thumb_${fileName}`;
 
         media.url = url;
         media.thumbUrl = thumbUrl;

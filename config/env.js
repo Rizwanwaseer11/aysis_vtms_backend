@@ -1,5 +1,13 @@
+const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config();
+
+const ROOT_DIR = path.resolve(__dirname, "..");
+
+function resolvePath(input) {
+  if (!input) return input;
+  return path.isAbsolute(input) ? input : path.resolve(ROOT_DIR, input);
+}
 
 function must(name) {
   const v = process.env[name];
@@ -19,8 +27,8 @@ module.exports = {
 
   REDIS_URL: process.env.REDIS_URL || "",
 
-  UPLOAD_TMP_DIR: process.env.UPLOAD_TMP_DIR || "./uploads/tmp",
-  UPLOAD_FINAL_DIR: process.env.UPLOAD_FINAL_DIR || "./uploads/final",
+  UPLOAD_TMP_DIR: resolvePath(process.env.UPLOAD_TMP_DIR || "./uploads/tmp"),
+  UPLOAD_FINAL_DIR: resolvePath(process.env.UPLOAD_FINAL_DIR || "./uploads/final"),
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "",
 
   MEDIA_RETENTION_DAYS: Number(process.env.MEDIA_RETENTION_DAYS || 90),
