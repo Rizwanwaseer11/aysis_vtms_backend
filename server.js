@@ -46,7 +46,11 @@ async function bootstrap() {
   const app = express();
 
   // Security & basic performance
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" }
+    })
+  );
   app.use(cors());
   app.use(compression());
   app.use(express.json({ limit: "5mb" }));

@@ -21,7 +21,7 @@ module.exports = {
 
   UPLOAD_TMP_DIR: process.env.UPLOAD_TMP_DIR || "./uploads/tmp",
   UPLOAD_FINAL_DIR: process.env.UPLOAD_FINAL_DIR || "./uploads/final",
-  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "http://localhost:4000",
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "",
 
   MEDIA_RETENTION_DAYS: Number(process.env.MEDIA_RETENTION_DAYS || 90),
 

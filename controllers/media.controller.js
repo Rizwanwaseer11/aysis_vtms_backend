@@ -4,7 +4,7 @@ const os = require("os");
 const multer = require("multer");
 const crypto = require("crypto");
 const { ok, fail } = require("../utils/response");
-const { UPLOAD_TMP_DIR, UPLOAD_FINAL_DIR, PUBLIC_BASE_URL } = require("../config/env");
+const { UPLOAD_TMP_DIR, UPLOAD_FINAL_DIR, PUBLIC_BASE_URL, API_BASE } = require("../config/env");
 const MediaFile = require("../models/MediaFile");
 const { watermarkQueue } = require("../jobs/queue");
 
@@ -26,6 +26,22 @@ function resolveTmpDir() {
       return UPLOAD_TMP_DIR;
     }
   }
+}
+
+function normalizeBaseUrl(raw, fallback) {
+  const candidate = String(raw || fallback || "").trim();
+  if (!candidate) return "";
+  let value = candidate.endsWith("/") ? candidate.slice(0, -1) : candidate;
+  if (API_BASE && value.endsWith(API_BASE)) {
+    value = value.slice(0, -API_BASE.length);
+    if (value.endsWith("/")) value = value.slice(0, -1);
+  }
+  return value;
+}
+
+function resolvePublicBaseUrl(req) {
+  const requestBase = `${req.protocol}://${req.get("host")}`;
+  return normalizeBaseUrl(PUBLIC_BASE_URL, requestBase);
 }
 
 // Multer storage (tmp)
@@ -59,7 +75,10 @@ async function uploadMedia(req, res, next) {
     if (!linkedTo || !kind) return fail(res, "linkedTo and kind are required");
 
     // Create temp URL (will be replaced after watermark)
-    const tempUrl = `${PUBLIC_BASE_URL}/uploads/tmp/${req.file.filename}`;
+    const publicBaseUrl = resolvePublicBaseUrl(req);
+    const tempUrl = publicBaseUrl
+      ? `${publicBaseUrl}/uploads/tmp/${req.file.filename}`
+      : `/uploads/tmp/${req.file.filename}`;
 
     // meta can include: supervisorName, binNumber, coords, zone/uc/ward etc.
     let meta = {};
@@ -93,7 +112,9 @@ async function uploadMedia(req, res, next) {
         fs.unlinkSync(req.file.path);
       }
 
-      doc.url = `${PUBLIC_BASE_URL}/uploads/final/${fileName}`;
+      doc.url = publicBaseUrl
+        ? `${publicBaseUrl}/uploads/final/${fileName}`
+        : `/uploads/final/${fileName}`;
       doc.thumbUrl = "";
       doc.watermarkStatus = "DONE";
       await doc.save();

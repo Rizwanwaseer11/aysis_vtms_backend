@@ -434,6 +434,14 @@ async function list(req, res, next) {
     if (req.query.driverHr) filter["driver.hrNumber"] = String(req.query.driverHr).trim();
     if (req.query.supervisorHr) filter["supervisor.hrNumber"] = String(req.query.supervisorHr).trim();
     if (req.query.placed !== undefined) filter["fork.placed"] = req.query.placed === "true";
+    if (req.query.vehicleNumber) {
+      const raw = String(req.query.vehicleNumber).trim().toUpperCase();
+      const regex = vehicleNumberRegex(raw);
+      filter["vehicle.vehicleNumber"] = regex || raw;
+    }
+    if (req.query.binNumber) {
+      filter["fork.binNumber"] = String(req.query.binNumber).trim().toUpperCase();
+    }
 
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
@@ -448,7 +456,13 @@ async function list(req, res, next) {
     if (cached) return ok(res, "Fork activities", cached.data, cached.meta);
 
     const [items, total] = await Promise.all([
-      ForkActivity.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ForkActivity.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("before.mediaId", "url thumbUrl")
+        .populate("after.mediaId", "url thumbUrl")
+        .lean(),
       ForkActivity.countDocuments(filter)
     ]);
 

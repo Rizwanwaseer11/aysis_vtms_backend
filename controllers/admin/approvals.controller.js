@@ -163,6 +163,18 @@ async function edit(req, res, next) {
 
     // Only allow edit by VTMS officer / admin employee (handled by route middleware permission)
     const body = req.body || {};
+    const toUpper = (value) => String(value || "").trim().toUpperCase();
+    const toSafeString = (value) => String(value || "").trim();
+    const toNumber = (value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      const num = Number(value);
+      return Number.isNaN(num) ? null : num;
+    };
+    const toDate = (value) => {
+      if (!value) return null;
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
 
     // Generic safe edits
     if (body.notes !== undefined) doc.notes = String(body.notes).trim();
@@ -175,6 +187,57 @@ async function edit(req, res, next) {
     // Proofs
     if (body.beforeMediaId !== undefined) doc.before.mediaId = body.beforeMediaId || null;
     if (body.afterMediaId !== undefined) doc.after.mediaId = body.afterMediaId || null;
+    if (body.beforeAt !== undefined) {
+      const d = toDate(body.beforeAt);
+      if (!d && body.beforeAt) return fail(res, "Invalid beforeAt");
+      doc.before.at = d || doc.before.at;
+    }
+    if (body.afterAt !== undefined) {
+      const d = toDate(body.afterAt);
+      if (!d && body.afterAt) return fail(res, "Invalid afterAt");
+      doc.after.at = d || doc.after.at;
+    }
+    if (body.beforeLat !== undefined) doc.before.lat = toNumber(body.beforeLat);
+    if (body.beforeLng !== undefined) doc.before.lng = toNumber(body.beforeLng);
+    if (body.afterLat !== undefined) doc.after.lat = toNumber(body.afterLat);
+    if (body.afterLng !== undefined) doc.after.lng = toNumber(body.afterLng);
+
+    // Core fields displayed in admin table
+    if (body.invoiceNo !== undefined) doc.invoiceNo = toSafeString(body.invoiceNo);
+    if (body.monthKey !== undefined) {
+      const mk = toSafeString(body.monthKey);
+      if (mk && !/^\d{4}-\d{2}$/.test(mk)) return fail(res, "Invalid monthKey");
+      if (mk) doc.monthKey = mk;
+    }
+
+    if (body.vehicleNumber !== undefined) doc.vehicle.vehicleNumber = toUpper(body.vehicleNumber);
+    if (body.vehicleTypeName !== undefined) doc.vehicle.vehicleTypeName = toSafeString(body.vehicleTypeName);
+    if (body.ownership !== undefined) doc.vehicle.ownership = toSafeString(body.ownership);
+
+    if (body.supervisorName !== undefined) doc.supervisor.name = toSafeString(body.supervisorName);
+    if (body.supervisorHr !== undefined) doc.supervisor.hrNumber = toUpper(body.supervisorHr);
+    if (body.driverName !== undefined) doc.driver.name = toSafeString(body.driverName);
+    if (body.driverHr !== undefined) doc.driver.hrNumber = toUpper(body.driverHr);
+
+    if (body.zoneName !== undefined) doc.geo.zoneName = toSafeString(body.zoneName);
+    if (body.ucName !== undefined) doc.geo.ucName = toSafeString(body.ucName);
+    if (body.wardName !== undefined) doc.geo.wardName = toSafeString(body.wardName);
+
+    // Fork-only fields
+    if (doc.fork) {
+      if (body.binNumber !== undefined) {
+        const bin = toUpper(body.binNumber);
+        doc.fork.binNumber = bin;
+        doc.fork.manualBinNumber = bin;
+      }
+      if (body.placed !== undefined) {
+        if (typeof body.placed === "string") {
+          doc.fork.placed = body.placed.toLowerCase() === "true";
+        } else {
+          doc.fork.placed = Boolean(body.placed);
+        }
+      }
+    }
 
     await doc.save();
 
