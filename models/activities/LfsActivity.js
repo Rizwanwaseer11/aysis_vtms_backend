@@ -55,6 +55,9 @@ after: {
 reviewedBy: {
   employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null },
   name: { type: String, default: "" },
+  hrNumber: { type: String, default: "" },
+  designationCode: { type: String, default: "" },
+  designationName: { type: String, default: "" },
   at: { type: Date, default: null },
   notes: { type: String, default: "" }
 },

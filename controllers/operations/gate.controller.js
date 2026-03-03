@@ -506,7 +506,13 @@ async function list(req, res, next) {
     if (cached) return ok(res, "gate activities", cached.data, cached.meta);
 
     const [items, total] = await Promise.all([
-      Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Model.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("before.mediaId", "url thumbUrl")
+        .populate("after.mediaId", "url thumbUrl")
+        .lean(),
       Model.countDocuments(filter)
     ]);
 

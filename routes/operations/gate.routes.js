@@ -5,7 +5,7 @@ const c = require("../../controllers/operations/gate.controller");
 
 // Field operations routes (USER tokens)
 router.use(authJwt);
-router.use(requireRole(["SUPERVISOR","DRIVER","ADMIN"]));
+router.use(requireRole(["SUPERVISOR","DRIVER","ADMIN","VTMS_OFFICER"]));
 
 // Shift management
 router.get("/shift/active", c.getActiveShift);

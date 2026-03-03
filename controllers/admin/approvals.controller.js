@@ -1,6 +1,7 @@
 const { ok, fail } = require("../../utils/response");
 const { parsePagination, buildMeta } = require("../../utils/pagination");
 const AuditLog = require("../../models/AuditLog");
+const Employee = require("../../models/Employee");
 
 const GateActivity = require("../../models/activities/GateActivity");
 const ForkActivity = require("../../models/activities/ForkActivity");
@@ -77,9 +78,14 @@ async function approve(req, res, next) {
 
     if (doc.status !== "PENDING") return fail(res, "Only PENDING can be approved", null, 400);
 
+    const employee = await Employee.findById(req.auth.id).lean();
+
     doc.status = "APPROVED";
     doc.reviewedBy.employeeId = req.auth.id;
-    doc.reviewedBy.name = req.auth.name || "";
+    doc.reviewedBy.name = req.auth.name || employee?.name || "";
+    doc.reviewedBy.hrNumber = req.auth.hrNumber || employee?.hrNumber || "";
+    doc.reviewedBy.designationCode = req.auth.role || employee?.designationCode || "";
+    doc.reviewedBy.designationName = employee?.designationName || "";
     doc.reviewedBy.at = new Date();
     doc.reviewedBy.notes = String((req.body || {}).notes || "").trim();
 
@@ -115,9 +121,14 @@ async function reject(req, res, next) {
 
     if (doc.status !== "PENDING") return fail(res, "Only PENDING can be rejected", null, 400);
 
+    const employee = await Employee.findById(req.auth.id).lean();
+
     doc.status = "REJECTED";
     doc.reviewedBy.employeeId = req.auth.id;
-    doc.reviewedBy.name = req.auth.name || "";
+    doc.reviewedBy.name = req.auth.name || employee?.name || "";
+    doc.reviewedBy.hrNumber = req.auth.hrNumber || employee?.hrNumber || "";
+    doc.reviewedBy.designationCode = req.auth.role || employee?.designationCode || "";
+    doc.reviewedBy.designationName = employee?.designationName || "";
     doc.reviewedBy.at = new Date();
     doc.reviewedBy.notes = String(notes).trim();
 
