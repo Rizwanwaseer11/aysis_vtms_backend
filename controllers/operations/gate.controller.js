@@ -53,6 +53,17 @@ function vehicleNumberRegex(value) {
   return new RegExp(`^${escaped.join("[^A-Z0-9]*")}$`, "i");
 }
 
+function normalizeNicNumber(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function nicNumberRegex(value) {
+  const normalized = normalizeNicNumber(value);
+  if (!normalized) return null;
+  const escaped = normalized.split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join("[^0-9]*")}$`);
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -201,6 +212,39 @@ async function getVehicle(req, res, next) {
       vehicleNumber: vehicle.vehicleNumber,
       vehicleTypeName: vehicle.vehicleTypeName,
       ownership: vehicle.ownership
+    });
+  } catch (e) { next(e); }
+}
+
+/**
+ * GET /operations/gate/driver/:nicNumber
+ * Lookup driver by NIC number (13 digits, separators allowed).
+ */
+async function getDriverByNic(req, res, next) {
+  try {
+    if (!requireGateUser(req, res)) return;
+    const raw = String(req.params.nicNumber || "").trim();
+    const normalized = normalizeNicNumber(raw);
+    if (!normalized || normalized.length !== 13) {
+      return fail(res, "nicNumber must be 13 digits");
+    }
+
+    const regex = nicNumberRegex(normalized);
+    const driver = await User.findOne({
+      nicNumber: regex || normalized,
+      isActive: true,
+      deletedAt: null
+    }).lean();
+    if (!driver) return fail(res, "Driver not found", null, 404);
+    if (driver.role !== "DRIVER") return fail(res, "User is not a driver", null, 400);
+
+    return ok(res, "Driver", {
+      id: driver._id,
+      name: driver.name,
+      hrNumber: driver.hrNumber,
+      nicNumber: driver.nicNumber,
+      role: driver.role,
+      operationType: driver.operationType
     });
   } catch (e) { next(e); }
 }
@@ -529,6 +573,7 @@ module.exports = {
   startShift,
   endShift,
   getVehicle,
+  getDriverByNic,
   getOpenActivity,
   createBeforeActivity,
   completeAfterActivity,

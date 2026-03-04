@@ -17,6 +17,7 @@ router.get("/stats", c.stats);
 
 // Vehicle lookup + activity lifecycle
 router.get("/vehicle/:vehicleNumber", c.getVehicle);
+router.get("/driver/:nicNumber", c.getDriverByNic);
 router.get("/activity/open", c.getOpenActivity);
 router.post("/activity/before", c.createBeforeActivity);
 router.patch("/activity/:id/after", c.completeAfterActivity);
