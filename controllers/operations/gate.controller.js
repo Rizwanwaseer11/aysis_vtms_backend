@@ -68,6 +68,44 @@ function normalizeOperation(value) {
   return String(value || "").toUpperCase().replace(/[^A-Z]/g, "");
 }
 
+async function resolveDriverForGate(body, vehicle) {
+  const driverId = body.driverId;
+  const driverHr = body.driverHr ? String(body.driverHr).trim().toUpperCase() : "";
+  const driverNicRaw = body.driverNic ? String(body.driverNic).trim() : "";
+  if (!driverId && !driverHr && !driverNicRaw) {
+    return { error: "Driver is required" };
+  }
+
+  const driverLookup = {};
+  if (driverId) {
+    driverLookup._id = driverId;
+  } else if (driverHr) {
+    driverLookup.hrNumber = driverHr;
+  } else {
+    const driverNic = normalizeNicNumber(driverNicRaw);
+    if (!driverNic || driverNic.length !== 13) {
+      return { error: "nicNumber must be 13 digits" };
+    }
+    driverLookup.nicNumber = nicNumberRegex(driverNic) || driverNic;
+  }
+
+  const driver = await User.findOne({
+    ...driverLookup,
+    isActive: true,
+    deletedAt: null
+  });
+  if (!driver) return { error: "Driver not found", status: 404 };
+  if (driver.role !== "DRIVER") return { error: "User is not a driver", status: 400 };
+
+  const vehicleType = normalizeOperation(vehicle.vehicleTypeName);
+  const driverType = normalizeOperation(driver.operationType);
+  if (!vehicleType || !driverType || vehicleType !== driverType) {
+    return { error: "Vehicle type and driver operation type do not match", status: 400 };
+  }
+
+  return { driver };
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -318,39 +356,11 @@ async function createBeforeActivity(req, res, next) {
     const vehicle = await Vehicle.findOne({ vehicleNumber: regex || vehicleNumber, isActive: true });
     if (!vehicle) return fail(res, "Vehicle not found", null, 404);
 
-    const driverId = body.driverId;
-    const driverHr = body.driverHr ? String(body.driverHr).trim().toUpperCase() : "";
-    const driverNicRaw = body.driverNic ? String(body.driverNic).trim() : "";
-    if (!driverId && !driverHr && !driverNicRaw) {
-      return fail(res, "Driver is required", null, 400);
+    const driverResult = await resolveDriverForGate(body, vehicle);
+    if (driverResult?.error) {
+      return fail(res, driverResult.error, null, driverResult.status || 400);
     }
-
-    const driverLookup = {};
-    if (driverId) {
-      driverLookup._id = driverId;
-    } else if (driverHr) {
-      driverLookup.hrNumber = driverHr;
-    } else {
-      const driverNic = normalizeNicNumber(driverNicRaw);
-      if (!driverNic || driverNic.length !== 13) {
-        return fail(res, "nicNumber must be 13 digits", null, 400);
-      }
-      driverLookup.nicNumber = nicNumberRegex(driverNic) || driverNic;
-    }
-
-    const driver = await User.findOne({
-      ...driverLookup,
-      isActive: true,
-      deletedAt: null
-    });
-    if (!driver) return fail(res, "Driver not found", null, 404);
-    if (driver.role !== "DRIVER") return fail(res, "User is not a driver", null, 400);
-
-    const vehicleType = normalizeOperation(vehicle.vehicleTypeName);
-    const driverType = normalizeOperation(driver.operationType);
-    if (!vehicleType || !driverType || vehicleType !== driverType) {
-      return fail(res, "Vehicle type and driver operation type do not match", null, 400);
-    }
+    const driver = driverResult.driver;
 
     const open = await Model.findOne({
       operationType: "GATE",
@@ -492,6 +502,12 @@ async function createActivity(req, res, next) {
     if (!beforeMedia) return fail(res, "beforeMediaId is invalid", null, 400);
     if (!afterMedia) return fail(res, "afterMediaId is invalid", null, 400);
 
+    const driverResult = await resolveDriverForGate(body, vehicle);
+    if (driverResult?.error) {
+      return fail(res, driverResult.error, null, driverResult.status || 400);
+    }
+    const driver = driverResult.driver;
+
     const { invoiceNo, monthKey } = await nextInvoice("GATE", null);
 
     const doc = await Model.create({
@@ -501,7 +517,7 @@ async function createActivity(req, res, next) {
       status: "PENDING",
       attendanceId: shift._id,
       supervisor: shift.supervisor,
-      driver: shift.driver,
+      driver: { userId: driver._id, name: driver.name, hrNumber: driver.hrNumber },
       vehicle: {
         vehicleId: vehicle._id,
         vehicleNumber: vehicle.vehicleNumber,

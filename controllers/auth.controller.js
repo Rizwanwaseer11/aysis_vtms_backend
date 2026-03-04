@@ -9,14 +9,24 @@ const Designation = require("../models/Designation");
 
 /**
  * POST /auth/user/login
- * Body: { email, password }
+ * Body: { nicNumber, password }
  */
 async function userLogin(req, res, next) {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password) return fail(res, "email and password are required", null, 400);
+    const { nicNumber, password } = req.body || {};
+    const normalizedNic = String(nicNumber || "").replace(/\D/g, "");
+    if (!normalizedNic || !password) {
+      return fail(res, "nic number and password are required", null, 400);
+    }
+    if (normalizedNic.length !== 13) {
+      return fail(res, "nic number must be 13 digits", null, 400);
+    }
 
-    const user = await User.findOne({ email: String(email).toLowerCase(), deletedAt: null });
+    const formattedNic = normalizedNic.replace(/^(\d{5})(\d{7})(\d{1})$/, "$1-$2-$3");
+    const user = await User.findOne({
+      nicNumber: { $in: [normalizedNic, formattedNic] },
+      deletedAt: null
+    });
     if (!user) return fail(res, "Invalid credentials", null, 401);
     if (!user.isActive) return fail(res, "You are inactive, kindly contact VTMS officer", null, 403);
 
@@ -39,7 +49,8 @@ async function userLogin(req, res, next) {
         name: user.name,
         role: user.role,
         operationType: user.operationType,
-        hrNumber: user.hrNumber
+        hrNumber: user.hrNumber,
+        nicNumber: user.nicNumber
       }
     });
   } catch (e) { next(e); }
