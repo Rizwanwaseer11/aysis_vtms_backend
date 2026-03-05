@@ -69,7 +69,8 @@ notes: { type: String, default: "" },
 deletedAt: { type: Date, default: null },
     flap: {
       mtNumber: { type: String, required: true, trim: true },
-      mtVisitCount: { type: Number, default: 1 }
+      mtVisitCount: { type: Number, default: 1 },
+      averageLoad: { type: Number, default: null, min: 1, max: 100 }
     }
   },
   { timestamps: true }
