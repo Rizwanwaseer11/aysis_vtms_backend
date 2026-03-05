@@ -333,12 +333,21 @@ async function createActivity(req, res, next) {
     if (!beforeMedia) return fail(res, "beforeMediaId is invalid", null, 400);
     if (!afterMedia) return fail(res, "afterMediaId is invalid", null, 400);
 
-    const mtVisitCount =
-      (await Model.countDocuments({
-        attendanceId: shift._id,
-        deletedAt: null,
-        "flap.mtNumber": mtNumber
-      })) + 1;
+    const vehicleNumberForCount = String(
+      body.vehicleNumber || shift.vehicle?.vehicleNumber || ""
+    ).trim();
+    const visitFilter = {
+      operationType: "FLAP",
+      deletedAt: null,
+      "flap.mtNumber": mtNumber
+    };
+    if (vehicleNumberForCount) {
+      visitFilter["vehicle.vehicleNumber"] = vehicleNumberForCount;
+    } else {
+      visitFilter.attendanceId = shift._id;
+    }
+
+    const mtVisitCount = (await Model.countDocuments(visitFilter)) + 1;
 
     const doc = await Model.create({
       operationType: "FLAP",
