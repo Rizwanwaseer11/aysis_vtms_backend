@@ -518,6 +518,7 @@ async function list(req, res, next) {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .populate("attendanceId", "shiftType")
         .populate("before.mediaId", "url thumbUrl")
         .populate("after.mediaId", "url thumbUrl")
         .lean(),
