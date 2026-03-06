@@ -15,7 +15,7 @@ router.patch("/shift/:id/end", c.endShift);
 router.patch("/shift/:id/stats", c.updateShiftStats);
 router.post("/activity", c.createActivity);
 router.get("/stats", c.stats);
-router.get("/driver/:hrNumber", c.getDriver);
+router.get("/driver/:nicNumber", c.getDriverByNic);
 
 // Geo + bin lookups for fork (read-only)
 router.get("/geo/zones", geo.listZones);

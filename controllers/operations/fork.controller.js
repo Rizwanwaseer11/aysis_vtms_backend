@@ -52,6 +52,17 @@ function normalizeHr(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function normalizeNicNumber(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function nicNumberRegex(value) {
+  const normalized = normalizeNicNumber(value);
+  if (!normalized) return null;
+  const escaped = normalized.split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join("[^0-9]*")}$`);
+}
+
 function mustBelongToShift(req, shift) {
   if (req.auth.role === "ADMIN") return true;
   const tokenHr = normalizeHr(req.auth.hrNumber);
@@ -60,6 +71,34 @@ function mustBelongToShift(req, shift) {
     tokenHr === normalizeHr(shift.supervisor?.hrNumber) ||
     tokenHr === normalizeHr(shift.driver?.hrNumber)
   );
+}
+
+async function resolveDriver({ nicNumber, hrNumber }) {
+  let lookup = null;
+  if (nicNumber) {
+    const normalized = normalizeNicNumber(nicNumber);
+    if (!normalized || normalized.length !== 13) {
+      return { error: "driver nicNumber must be 13 digits" };
+    }
+    const regex = nicNumberRegex(normalized);
+    lookup = { nicNumber: regex || normalized };
+  } else if (hrNumber) {
+    lookup = { hrNumber: normalizeHr(hrNumber) };
+  }
+
+  if (!lookup) return { error: "driver identifier is required" };
+
+  const driver = await User.findOne({
+    ...lookup,
+    isActive: true,
+    deletedAt: null
+  }).lean();
+  if (!driver) return { error: "Driver not found", status: 404 };
+  if (driver.role !== "DRIVER") return { error: "User is not a driver", status: 400 };
+  if (driver.operationType !== "FORK") {
+    return { error: "Driver operation is not FORK", status: 400 };
+  }
+  return { driver };
 }
 
 /**
@@ -88,16 +127,24 @@ async function getActiveShift(req, res, next) {
 }
 
 /**
- * GET /operations/fork/driver/:hrNumber
- * Lightweight driver lookup for validation.
+ * GET /operations/fork/driver/:nicNumber
+ * Lookup driver by NIC number (13 digits, separators allowed).
  */
-async function getDriver(req, res, next) {
+async function getDriverByNic(req, res, next) {
   try {
     if (!requireForkUser(req, res)) return;
-    const hrNumber = normalizeHr(req.params.hrNumber);
-    if (!hrNumber) return fail(res, "hrNumber is required");
+    const raw = String(req.params.nicNumber || "").trim();
+    const normalized = normalizeNicNumber(raw);
+    if (!normalized || normalized.length !== 13) {
+      return fail(res, "nicNumber must be 13 digits");
+    }
 
-    const driver = await User.findOne({ hrNumber, isActive: true, deletedAt: null }).lean();
+    const regex = nicNumberRegex(normalized);
+    const driver = await User.findOne({
+      nicNumber: regex || normalized,
+      isActive: true,
+      deletedAt: null
+    }).lean();
     if (!driver) return fail(res, "Driver not found", null, 404);
     if (driver.role !== "DRIVER") return fail(res, "User is not a driver", null, 400);
     if (driver.operationType !== "FORK") return fail(res, "Driver operation is not FORK", null, 400);
@@ -106,6 +153,7 @@ async function getDriver(req, res, next) {
       id: driver._id,
       name: driver.name,
       hrNumber: driver.hrNumber,
+      nicNumber: driver.nicNumber,
       role: driver.role,
       operationType: driver.operationType
     });
@@ -116,7 +164,7 @@ async function getDriver(req, res, next) {
  * POST /operations/fork/shift/start
  * Body:
  *  {
- *    shiftType, supervisorHr, driverHr, vehicleNumber,
+ *    shiftType, supervisorHr, driverNic or driverHr, vehicleNumber,
  *    startLat, startLng,
  *    supervisorMediaUrl, driverMediaUrl
  *  }
@@ -125,21 +173,23 @@ async function startShift(req, res, next) {
   try {
     if (!requireForkUser(req, res)) return;
     const body = req.body || {};
-    const required = ["shiftType", "supervisorHr", "driverHr", "vehicleNumber", "startLat", "startLng"];
+    const required = ["shiftType", "supervisorHr", "vehicleNumber", "startLat", "startLng"];
     const missing = required.filter((k) => body[k] === undefined || body[k] === null || body[k] === "");
     if (missing.length) return fail(res, `Missing fields: ${missing.join(", ")}`);
 
     // Validate supervisor identity
     const supervisorHr = normalizeHr(body.supervisorHr);
-    const driverHr = normalizeHr(body.driverHr);
+    const driverNic = body.driverNic || body.driverNIC || body.driver_nic || "";
+    const driverHr = body.driverHr || body.driverHR || "";
+
+    if (!driverNic && !driverHr) {
+      return fail(res, "driverNic is required");
+    }
 
     if (req.auth.role !== "ADMIN") {
       const tokenHr = normalizeHr(req.auth.hrNumber);
       if (req.auth.role === "SUPERVISOR" && tokenHr !== supervisorHr) {
         return fail(res, "supervisorHr does not match logged in user", null, 403);
-      }
-      if (req.auth.role === "DRIVER" && tokenHr !== driverHr) {
-        return fail(res, "driverHr does not match logged in user", null, 403);
       }
     }
 
@@ -148,10 +198,18 @@ async function startShift(req, res, next) {
     if (supervisor.role !== "SUPERVISOR") return fail(res, "Supervisor role is invalid", null, 400);
     if (supervisor.operationType !== "FORK") return fail(res, "Supervisor operation is not FORK", null, 400);
 
-    const driver = await User.findOne({ hrNumber: driverHr, isActive: true, deletedAt: null });
-    if (!driver) return fail(res, "Driver not found", null, 404);
-    if (driver.role !== "DRIVER") return fail(res, "Driver role is invalid", null, 400);
-    if (driver.operationType !== "FORK") return fail(res, "Driver operation is not FORK", null, 400);
+    const driverResult = await resolveDriver({ nicNumber: driverNic, hrNumber: driverHr });
+    if (driverResult.error) {
+      return fail(res, driverResult.error, null, driverResult.status || 400);
+    }
+    const driver = driverResult.driver;
+
+    if (req.auth.role !== "ADMIN") {
+      const tokenHr = normalizeHr(req.auth.hrNumber);
+      if (req.auth.role === "DRIVER" && tokenHr !== normalizeHr(driver.hrNumber)) {
+        return fail(res, "driver does not match logged in user", null, 403);
+      }
+    }
 
     const vehicleNumber = String(body.vehicleNumber || "").trim().toUpperCase();
     const regex = vehicleNumberRegex(vehicleNumber);
@@ -476,7 +534,7 @@ async function list(req, res, next) {
 
 module.exports = {
   getActiveShift,
-  getDriver,
+  getDriverByNic,
   startShift,
   createActivity,
   endShift,
