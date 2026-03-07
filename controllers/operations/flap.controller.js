@@ -187,7 +187,7 @@ async function getVehicle(req, res, next) {
 /**
  * POST /operations/flap/shift/start
  * Body: {
- *  shiftType, supervisorNic or supervisorHr, driverNic or driverHr, vehicleNumber?,
+ *  shiftType, supervisorNic? or supervisorHr?, driverNic or driverHr, vehicleNumber?,
  *  startLat, startLng, supervisorMediaUrl?, driverMediaUrl?
  * }
  */
@@ -202,22 +202,26 @@ async function startShift(req, res, next) {
     const driverNic = body.driverNic || body.driverNIC || body.driver_nic || "";
     const supervisorHr = body.supervisorHr || body.supervisorHR || body.hrNumber || "";
     const driverHr = body.driverHr || body.driverHR || "";
+    const isDriverStarter = req.auth.role === "DRIVER";
 
-    if (!supervisorNic && !supervisorHr) missing.push("supervisorNic");
     if (!driverNic && !driverHr) missing.push("driverNic");
+    if (!isDriverStarter && !supervisorNic && !supervisorHr) missing.push("supervisorNic");
     if (missing.length) return fail(res, `Missing fields: ${missing.join(", ")}`);
 
-    const supervisorResult = await resolveUser({
-      nicNumber: supervisorNic,
-      hrNumber: supervisorHr,
-      roleLabel: "Supervisor"
-    });
-    if (supervisorResult.error) {
-      return fail(res, supervisorResult.error, null, supervisorResult.status || 400);
+    let supervisor = null;
+    if (supervisorNic || supervisorHr) {
+      const supervisorResult = await resolveUser({
+        nicNumber: supervisorNic,
+        hrNumber: supervisorHr,
+        roleLabel: "Supervisor"
+      });
+      if (supervisorResult.error) {
+        return fail(res, supervisorResult.error, null, supervisorResult.status || 400);
+      }
+      supervisor = supervisorResult.user;
+      if (supervisor.role !== "SUPERVISOR") return fail(res, "Supervisor role is invalid", null, 400);
+      if (supervisor.operationType !== "FLAP") return fail(res, "Supervisor operation is not FLAP", null, 400);
     }
-    const supervisor = supervisorResult.user;
-    if (supervisor.role !== "SUPERVISOR") return fail(res, "Supervisor role is invalid", null, 400);
-    if (supervisor.operationType !== "FLAP") return fail(res, "Supervisor operation is not FLAP", null, 400);
 
     const driverResult = await resolveUser({
       nicNumber: driverNic,
@@ -233,18 +237,25 @@ async function startShift(req, res, next) {
 
     if (req.auth.role !== "ADMIN") {
       const tokenHr = normalizeHr(req.auth.hrNumber);
-      if (req.auth.role === "SUPERVISOR" && tokenHr !== normalizeHr(supervisor.hrNumber)) {
-        return fail(res, "supervisor does not match logged in user", null, 403);
+      if (req.auth.role === "SUPERVISOR") {
+        if (!supervisor) return fail(res, "supervisorNic is required for supervisor login");
+        if (tokenHr !== normalizeHr(supervisor.hrNumber)) {
+          return fail(res, "supervisor does not match logged in user", null, 403);
+        }
       }
       if (req.auth.role === "DRIVER" && tokenHr !== normalizeHr(driver.hrNumber)) {
         return fail(res, "driver does not match logged in user", null, 403);
       }
     }
 
+    const shiftUsers = [{ "driver.hrNumber": driver.hrNumber }];
+    if (supervisor?.hrNumber) {
+      shiftUsers.push({ "supervisor.hrNumber": supervisor.hrNumber });
+    }
     const existingShift = await AttendanceShift.findOne({
       operationType: "FLAP",
       status: "ONWORK",
-      $or: [{ "supervisor.hrNumber": supervisor.hrNumber }, { "driver.hrNumber": driver.hrNumber }]
+      $or: shiftUsers
     }).lean();
     if (existingShift) {
       return fail(res, "An active shift already exists", { shiftId: existingShift._id }, 409);
@@ -261,7 +272,9 @@ async function startShift(req, res, next) {
     const shift = await AttendanceShift.create({
       operationType: "FLAP",
       shiftType: body.shiftType,
-      supervisor: { userId: supervisor._id, name: supervisor.name, hrNumber: supervisor.hrNumber },
+      supervisor: supervisor
+        ? { userId: supervisor._id, name: supervisor.name, hrNumber: supervisor.hrNumber }
+        : { userId: null, name: "", hrNumber: "" },
       driver: { userId: driver._id, name: driver.name, hrNumber: driver.hrNumber },
       vehicle: vehicle
         ? {

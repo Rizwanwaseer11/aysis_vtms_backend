@@ -164,21 +164,20 @@ async function getDriverByNic(req, res, next) {
  * POST /operations/fork/shift/start
  * Body:
  *  {
- *    shiftType, supervisorHr, driverNic or driverHr, vehicleNumber,
+ *    shiftType, supervisorHr?, driverNic or driverHr, vehicleNumber,
  *    startLat, startLng,
- *    supervisorMediaUrl, driverMediaUrl
+ *    supervisorMediaUrl?, driverMediaUrl?
  *  }
  */
 async function startShift(req, res, next) {
   try {
     if (!requireForkUser(req, res)) return;
     const body = req.body || {};
-    const required = ["shiftType", "supervisorHr", "vehicleNumber", "startLat", "startLng"];
+    const required = ["shiftType", "vehicleNumber", "startLat", "startLng"];
     const missing = required.filter((k) => body[k] === undefined || body[k] === null || body[k] === "");
     if (missing.length) return fail(res, `Missing fields: ${missing.join(", ")}`);
 
-    // Validate supervisor identity
-    const supervisorHr = normalizeHr(body.supervisorHr);
+    const supervisorHr = normalizeHr(body.supervisorHr || body.supervisorHR || body.hrNumber);
     const driverNic = body.driverNic || body.driverNIC || body.driver_nic || "";
     const driverHr = body.driverHr || body.driverHR || "";
 
@@ -186,17 +185,23 @@ async function startShift(req, res, next) {
       return fail(res, "driverNic is required");
     }
 
-    if (req.auth.role !== "ADMIN") {
-      const tokenHr = normalizeHr(req.auth.hrNumber);
-      if (req.auth.role === "SUPERVISOR" && tokenHr !== supervisorHr) {
-        return fail(res, "supervisorHr does not match logged in user", null, 403);
-      }
+    let supervisor = null;
+    if (supervisorHr) {
+      supervisor = await User.findOne({ hrNumber: supervisorHr, isActive: true, deletedAt: null });
+      if (!supervisor) return fail(res, "Supervisor not found", null, 404);
+      if (supervisor.role !== "SUPERVISOR") return fail(res, "Supervisor role is invalid", null, 400);
+      if (supervisor.operationType !== "FORK") return fail(res, "Supervisor operation is not FORK", null, 400);
     }
 
-    const supervisor = await User.findOne({ hrNumber: supervisorHr, isActive: true, deletedAt: null });
-    if (!supervisor) return fail(res, "Supervisor not found", null, 404);
-    if (supervisor.role !== "SUPERVISOR") return fail(res, "Supervisor role is invalid", null, 400);
-    if (supervisor.operationType !== "FORK") return fail(res, "Supervisor operation is not FORK", null, 400);
+    if (req.auth.role !== "ADMIN") {
+      const tokenHr = normalizeHr(req.auth.hrNumber);
+      if (req.auth.role === "SUPERVISOR") {
+        if (!supervisorHr) return fail(res, "supervisorHr is required for supervisor login");
+        if (tokenHr !== supervisorHr) {
+          return fail(res, "supervisorHr does not match logged in user", null, 403);
+        }
+      }
+    }
 
     const driverResult = await resolveDriver({ nicNumber: driverNic, hrNumber: driverHr });
     if (driverResult.error) {
@@ -216,13 +221,14 @@ async function startShift(req, res, next) {
     const vehicle = await Vehicle.findOne({ vehicleNumber: regex || vehicleNumber, isActive: true });
     if (!vehicle) return fail(res, "Vehicle not found", null, 404);
 
+    const shiftUsers = [{ "driver.hrNumber": driver.hrNumber }];
+    if (supervisor?.hrNumber) {
+      shiftUsers.push({ "supervisor.hrNumber": supervisor.hrNumber });
+    }
     const existingShift = await AttendanceShift.findOne({
       operationType: "FORK",
       status: "ONWORK",
-      $or: [
-        { "supervisor.hrNumber": supervisor.hrNumber },
-        { "driver.hrNumber": driver.hrNumber }
-      ]
+      $or: shiftUsers
     }).lean();
     if (existingShift) {
       return fail(res, "An active shift already exists", { shiftId: existingShift._id }, 409);
@@ -232,7 +238,9 @@ async function startShift(req, res, next) {
     const shift = await AttendanceShift.create({
       operationType: "FORK",
       shiftType: body.shiftType,
-      supervisor: { userId: supervisor._id, name: supervisor.name, hrNumber: supervisor.hrNumber },
+      supervisor: supervisor
+        ? { userId: supervisor._id, name: supervisor.name, hrNumber: supervisor.hrNumber }
+        : { userId: null, name: "", hrNumber: "" },
       driver: { userId: driver._id, name: driver.name, hrNumber: driver.hrNumber },
       vehicle: { vehicleId: vehicle._id, vehicleNumber: vehicle.vehicleNumber, vehicleTypeName: vehicle.vehicleTypeName, ownership: vehicle.ownership },
       status: "ONWORK",
